@@ -1,6 +1,9 @@
 #include "signal_processor.h"
 #include <cmath>
 #include "esp_dsp.h"
+#include "esp_timer.h"
+#include "driver/adc.h"
+#include "esp_log.h"
 
 #define SAMPLE_RATE_HZ      8000
 #define FRAME_SIZE          256
@@ -11,13 +14,12 @@ static const char *TAG = "SIGNAL_PROC";
 // ADC buffer
 static int16_t adc_buffer[FRAME_SIZE];
 
-// Remove these duplicate lines:
-// TaskHandle_t adc_task_handle = NULL;
-// QueueHandle_t frame_queue = NULL;
+// Global queue and task handle declarations
+QueueHandle_t frame_queue = NULL;
+TaskHandle_t adc_task_handle = NULL;
 
 // FFT buffers
 static float fft_input[FFT_SIZE];
-static float fft_output[FFT_SIZE];
 static float window[FFT_SIZE];
 
 // Hamming window
@@ -29,6 +31,7 @@ static void init_window() {
 
 // ADC task
 static void adc_task(void *pvParameters) {
+    // Configure ADC
     adc1_config_width(ADC_WIDTH_BIT_12);
     adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_12);
     
@@ -40,7 +43,9 @@ static void adc_task(void *pvParameters) {
         }
         
         // Send to processing queue
-        xQueueSend(frame_queue, adc_buffer, portMAX_DELAY);
+        if (frame_queue != NULL) {
+            xQueueSend(frame_queue, adc_buffer, portMAX_DELAY);
+        }
     }
 }
 
@@ -48,7 +53,7 @@ SignalFrame SignalProcessor::capture_frame() {
     SignalFrame frame;
     
     // Wait for new frame from ADC task
-    if (xQueueReceive(frame_queue, frame.samples, pdMS_TO_TICKS(100))) {
+    if (frame_queue != NULL && xQueueReceive(frame_queue, frame.samples, pdMS_TO_TICKS(100))) {
         frame.timestamp = esp_timer_get_time();
         frame.sample_count = FRAME_SIZE;
         return frame;
@@ -56,6 +61,8 @@ SignalFrame SignalProcessor::capture_frame() {
     
     // Fallback: return empty frame
     memset(frame.samples, 0, sizeof(frame.samples));
+    frame.sample_count = 0;
+    frame.timestamp = esp_timer_get_time();
     return frame;
 }
 
@@ -102,10 +109,6 @@ ProcessedData SignalProcessor::preprocess(const SignalFrame &frame) {
     return data;
 }
 
-// Add these declarations at the top of the file (after includes)
-QueueHandle_t frame_queue = NULL;
-TaskHandle_t adc_task_handle = NULL;
-
 void SignalProcessor::init() {
     ESP_LOGI(TAG, "Initializing Signal Processor");
     
@@ -120,9 +123,19 @@ void SignalProcessor::init() {
     
     // Create frame queue
     frame_queue = xQueueCreate(5, sizeof(int16_t) * FRAME_SIZE);
+    if (frame_queue == NULL) {
+        ESP_LOGE(TAG, "Failed to create frame queue");
+        return;
+    }
     
     // Start ADC task
-    xTaskCreate(adc_task, "adc_task", 4096, NULL, 5, &adc_task_handle);
+    BaseType_t task_ret = xTaskCreate(adc_task, "adc_task", 4096, NULL, 5, &adc_task_handle);
+    if (task_ret != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create ADC task");
+        vQueueDelete(frame_queue);
+        frame_queue = NULL;
+        return;
+    }
     
     ESP_LOGI(TAG, "Signal Processor initialized");
 }

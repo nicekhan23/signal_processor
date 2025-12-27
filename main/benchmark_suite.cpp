@@ -1,6 +1,7 @@
 #include "benchmark_suite.h"
 #include "esp_system.h"
 #include "driver/i2c.h"
+#include "esp_log.h"
 
 #define INA219_ADDR 0x40
 #define I2C_PORT    I2C_NUM_0
@@ -17,7 +18,10 @@ void BenchmarkSuite::init() {
         .scl_io_num = GPIO_NUM_22,
         .sda_pullup_en = GPIO_PULLUP_ENABLE,
         .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master = { .clk_speed = 100000 }
+        .master = {
+            .clk_speed = 100000
+        },
+        .clk_flags = 0  // Add this to fix the warning
     };
     
     i2c_param_config(I2C_PORT, &conf);

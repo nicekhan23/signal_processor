@@ -14,10 +14,13 @@ extern "C" void app_main(void)
     
     // Initialize components
     SignalProcessor::init();
-    InferenceEngine::init();
+    InferenceEngine::init();  // This will work in dummy mode
     BenchmarkSuite::init();
     
+    ESP_LOGI(TAG, "All components initialized. Starting main loop...");
+    
     // Main processing loop
+    int inference_count = 0;
     while (true) {
         // 1. Acquire signal frame
         SignalFrame frame = SignalProcessor::capture_frame();
@@ -32,9 +35,9 @@ extern "C" void app_main(void)
         BenchmarkSuite::record_inference(result);
         
         // 5. Output result
-        ESP_LOGI(TAG, "Class: %d, Confidence: %.2f, Latency: %" PRIu32 " us", 
-                result.class_id, result.confidence, result.latency_us);
+        ESP_LOGI(TAG, "Inference %d: Class: %d, Confidence: %.2f, Latency: %" PRIu32 " us", 
+                inference_count++, result.class_id, result.confidence, result.latency_us);
         
-        vTaskDelay(pdMS_TO_TICKS(10)); // 100Hz classification rate
+        vTaskDelay(pdMS_TO_TICKS(100)); // 10Hz classification rate (slower for testing)
     }
 }

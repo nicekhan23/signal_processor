@@ -1,0 +1,14 @@
+{
+  "cnn": {
+    "accuracy": 0.8274999856948853,
+    "size_bytes": 26176
+  },
+  "rnn": {
+    "accuracy": 0.0,
+    "size_bytes": 42912
+  },
+  "dnn": {
+    "accuracy": 0.014999999664723873,
+    "size_bytes": 13064
+  }
+}
